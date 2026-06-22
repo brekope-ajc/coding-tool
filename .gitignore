@@ -17,9 +17,6 @@ out/
 .env.*.local
 .env.test.remote
 .env.prod
-.op-token
-.op-vault
-.gh-token
 
 # IDE
 .idea/
@@ -55,7 +52,6 @@ tsconfig.tsbuildinfo
 *.bak
 *.tmp
 .cache/
-.vercel
 
 # Project-specific
 all_solutions_combined.txt
@@ -69,6 +65,15 @@ history/
 # Claude Code local settings
 .claude/settings.local.json
 
+# Claude Code worktree-isolation artifacts
+.claude/worktrees/
+.claude/.stale-worktree
+
 # Devcontainer instances
 .devcontainer-instances/
 .devcontainer/.devpod-internal/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

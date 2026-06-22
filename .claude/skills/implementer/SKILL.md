@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Pure development workflow with test-first development and coverage review. Used by coordinator directly or as a subagent. Never manages beads issues or commits.
+description: Pure development workflow with test-first development and coverage review. Used by coordinator as a subagent. Never manages beads issues or commits.
 ---
 
 # Implementer
@@ -11,29 +11,29 @@ This skill covers development only — no issue tracking, no commits, no pushes.
 
 ## Principles
 
+- **Stay in your assigned worktree.** You can `cd` freely within it, but don't leave its root, and don't write to absolute paths outside it. Every worktree is a full repo — `bd`, `git`, `npm` all work from inside it.
 - Never silently work around problems. Throw errors for missing env vars, invalid state, missing dependencies.
 - Mock properly in tests. Do not add production fallbacks to make tests pass.
-- No `as any` or `as unknown` in production code.
+- No type casts that bypass the type system.
 - No optional chaining on required properties.
-- **Every production code change requires tests.** No exceptions for migrations, refactors, copy-paste, or "just wiring things up." If you wrote or modified production code, you must write tests for it. Never defer tests to a follow-up issue.
+- **Test cases from the issue are your spec.** The planner defines concrete test cases on each task. Implement those first, then add high-value coverage for gaps. Focus on tests that catch real bugs — avoid exhaustive, duplicative unit tests that test constructors, wiring, or things the compiler already guarantees.
+- **Delegate quality gates to test-runner sub-agents.** Do NOT run `npm test`, `npm run lint`, or `npx tsc --noEmit` directly — their output consumes your context window. Use the Task tool to spawn a test-runner (see Phase 3). Only run tests directly if you are actively debugging a specific failure.
+- **Lint and typecheck are run as part of the Phase 3 gate, not separately.** lefthook's pre-commit hook also enforces lint + typecheck on every commit, so don't run them ad hoc — the test-runner runs the full gate.
+- **If a hook blocks a tool call, stop.** Never work around it with scripts, `sed`, or other indirect tricks. Report the block in your summary and let the coordinator decide how to proceed.
 
 ## Phase 1: Write Failing Tests
 
-Write tests for the behavior you are about to change or add. Do this **before** touching any production code.
+Implement the **test cases defined in the task issue** before touching production code. These are your acceptance criteria — they define what "done" looks like.
 
-**This phase is NOT optional.** Common excuses that do NOT exempt you from writing tests:
-- "It's just a migration" — migrated code has new integration points that need testing
-- "It's just wiring up an API client" — API client calls, error handling, and auth headers need tests
-- "The old code didn't have tests" — that's a reason to add them, not skip them
-- "I'll add tests later" — no, tests ship with the code, always
+1. Read the task description (`bd show <task-id> --json`) and identify the test cases
+2. Read the relevant production code to understand current behavior
+3. Implement each specified test case
+4. Add additional high-value tests for gaps you identify (error paths, edge cases) — but focus on quality over quantity. A few well-targeted tests beat many shallow ones.
+5. Verify your new tests fail by delegating to a test-runner sub-agent (see Phase 3)
 
-1. Read the relevant production code to understand current behavior
-2. Write new test cases that describe the desired behavior after your change
-3. Run the tests:
+**Test documentation:** Planned and critical tests (integration, e2e, non-obvious unit tests) must include a docstring answering: what contract is verified, why it matters, what breaks if violated. Table-driven tests with descriptive names are often self-documenting — use judgment.
 
-```bash
-npm test
-```
+**Skipping tests:** Only for genuinely test-free changes (pure config, copy, env vars). Migrations, refactors, and wiring still need tests.
 
 **Gate:** Your new tests **fail** (or, for pure deletions/removals, you can write tests asserting the old behavior is gone — these will pass after implementation). If your new tests already pass, they are not testing anything new. Rewrite them.
 
@@ -43,56 +43,26 @@ Make the production code changes. Keep changes minimal and focused on the task.
 
 ## Phase 3: Verify
 
-Run quality gates matching the code you changed. See the **Quality Gates** table in CLAUDE.md for all targets.
+**Delegate quality gate runs to a test-runner sub-agent** to preserve your context window. Do NOT run these commands directly with the Bash tool — test output is verbose and wastes context you need for later phases. Use the Task tool with `subagent_type: "Bash"` and `model: "haiku"`:
 
-**Gate:** All quality gate commands pass with zero errors. If any fails, fix the issues before proceeding.
+```
+ROLE: Test Runner
+SKILL: Read and follow .claude/skills/test-runner/SKILL.md
 
-## Phase 4: Test Coverage Review
-
-This is an audit, not a formality. Evaluate whether your tests actually cover the changes you made.
-
-### Step 1: List what changed
-
-```bash
-git diff --name-only
+WORKING DIRECTORY: <worktree-path>
+COMMANDS:
+- <test commands from the Quality Gates table in CLAUDE.md matching changed code>
 ```
 
-Separate the output into production files and test files.
+**Run the gates for the code you changed:** `npm test` (always), `npm run lint`, `npx tsc --noEmit`, plus `npm run test:integration:sandbox` if the change touches the sandbox/server boundary. lefthook enforces lint + typecheck on pre-commit and `npm test` on pre-push, so commits/pushes are gated automatically — but run the gate explicitly here (via the test-runner) so failures surface before you hand back, not at commit time.
 
-### Step 2: For each changed production file, evaluate
+**Gate:** Sub-agent reports PASS. If FAIL, read the error summary, fix the issue, and re-delegate. Only run quality gates directly in your own context if you need to debug a failure interactively.
 
-- **What behavior changed?** (new feature, bug fix, removed feature, refactored logic)
-- **What existing tests cover this file?** Read the corresponding test file if one exists.
-- **Are there gaps?** Specifically:
-  - Happy path for new/changed behavior
-  - Error paths and edge cases
-  - Regression test if this is a bug fix (a test that would have caught the original bug)
-  - Boundary conditions
+## Phase 4: Test Coverage Audit
 
-### Step 3: Evaluate integration test needs
+Verify all planned test cases are implemented. Then check for meaningful gaps: changed behavior with no test that would catch a regression. Focus on real failure modes, not exhaustive coverage. If gaps exist, write targeted tests and re-run via test-runner.
 
-Integration tests are needed when changes affect:
-- Repository/persistence layer (database queries, data mapping)
-- API routes that combine multiple services
-- Auth flows or permission checks
-- Data flowing across multiple layers (API → service → repository)
-
-If integration tests are needed, write them as `*.integration.test.ts` files.
-
-### Step 4: Evaluate E2E test needs
-
-E2E tests are kept small and focused on critical workflows to minimize runtime. Check:
-
-1. Do any existing E2E tests cover workflows affected by your changes?
-2. If yes, do those E2E tests need updating to reflect your changes?
-
-Do **not** add new E2E tests unless explicitly requested. Only update existing ones when the workflows they test have been modified.
-
-### Step 5: Fill gaps
-
-Write any missing tests identified above. Then re-run quality gates.
-
-**Gate:** All tests pass, including your new coverage additions. If you identified no gaps in Steps 2-4, document your reasoning (e.g., "Changes were purely deletions; added regression tests in Phase 1 confirming removed elements no longer render").
+**Gate:** All planned test cases implemented. No meaningful coverage gaps, or gaps documented with reasoning.
 
 ## Phase 5: Summary
 

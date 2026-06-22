@@ -23,17 +23,22 @@ You review the full branch diff for correctness issues. You read every changed l
 
 ## Review Process
 
+### 0. Enter Worktree
+
+```
+EnterWorktree(path: <WORKTREE>)
+```
+
 ### 1. Get the Full Diff
 
 ```bash
-cd <worktree-path>
 git diff <base-branch>...HEAD --stat
 git diff <base-branch>...HEAD
 ```
 
-### 2. Run Quality Gates
+### 2. Quality Gates
 
-Run quality gates per the **Quality Gates** table in CLAUDE.md. If any fail, note the specific failures.
+The coordinator's test-runner — and lefthook's pre-commit/pre-push hooks — already ran tests, lint, and typecheck before this review. Do not re-run them here. Focus your review on the code diff itself.
 
 ### 3. Review Every Changed File
 
