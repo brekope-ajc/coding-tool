@@ -9,8 +9,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # which calls `bd hooks run <stage>`, so we do NOT run `bd hooks install`).
 curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
 
+# Bootstrap the beads database. The Dolt DB lives under .beads/embeddeddolt/
+# (gitignored) and is not carried by a clone/fork, so a fresh container has no
+# database. `bd bootstrap` creates one (prefix auto-detected from the repo dir).
+# This MUST run before any other bd command (e.g. the SessionStart `bd prime`
+# hook) auto-creates an empty, prefix-less DB — that half-initialized state makes
+# `bd create` fail with "issue_prefix config is missing".
+bd bootstrap
+
 # Install Claude Code
 curl -fsSL https://claude.ai/install.sh | bash
+
+# Install the PostgreSQL client (psql) for poking the local Supabase DB directly
+# on :54322 (beyond Supabase Studio). ~12MB, client only — no server. Pinned to
+# v17 to match the app's Postgres major version (see supabase/config.toml).
+sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client-17
 
 # Project-specific tools
 npm install
