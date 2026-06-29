@@ -1,6 +1,6 @@
 {
   "name": "coding-tool",
-  "image": "mcr.microsoft.com/devcontainers/python:3.12-node",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
 
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/coding-tool,type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/coding-tool",
